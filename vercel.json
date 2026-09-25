@@ -1,0 +1,3 @@
+{
+  "functions": { "api/fill.py": { "maxDuration": 30, "includeFiles": "templates/**" } }
+}
