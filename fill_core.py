@@ -22,11 +22,21 @@ FORMS = {
         "map": {
             "nom": "form1/Page1/PersonalDetails/Name/FamilyName",
             "prenom": "form1/Page1/PersonalDetails/Name/GivenName",
+            "sexe": "form1/Page1/PersonalDetails/Sex/Sex",
             "lieu_naissance": "form1/Page1/PersonalDetails/PlaceBirthCity",
-            "pays_citoyennete": "form1/Page1/PersonalDetails/PlaceBirthCountry",
+            "pays_naissance": "form1/Page1/PersonalDetails/PlaceBirthCountry",
+            "pays_citoyennete": "form1/Page1/PersonalDetails/Citizenship/Citizenship",
+            "pays_residence": "form1/Page1/PersonalDetails/CurrentCOR/Row2/Pays",
+            "courriel": "form1/Page2/contact/FaxEmail/Email",
+            "adresse_rue": "form1/Page2/contact/AddressRow1/Streetname/Streetname",
+            "adresse_ville": "form1/Page2/contact/AddressRow2/CityTow/CityTown",
+            "adresse_pays": "form1/Page2/contact/AddressRow2/Pays/Pays",
+            "adresse_province": "form1/Page2/contact/AddressRow2/ProvinceState/ProvinceState",
+            "adresse_code_postal": "form1/Page2/contact/AddressRow2/PostalCode/PostalCode",
             "passeport_numero": "form1/Page2/MaritalStatus/SectionA/Passport/PassportNum/PassportNum",
-            "passeport_expiration": "form1/Page2/MaritalStatus/SectionA/Passport/ExpiryDate",
+            "passeport_pays": "form1/Page2/MaritalStatus/SectionA/Passport/CountryofIssue/CountryofIssue",
             "passeport_emission": "form1/Page2/MaritalStatus/SectionA/Passport/IssueDate/IssueDate",
+            "passeport_expiration": "form1/Page2/MaritalStatus/SectionA/Passport/ExpiryDate",
             "_dob": ("form1/Page1/PersonalDetails/DOBYear",
                      "form1/Page1/PersonalDetails/DOBMonth",
                      "form1/Page1/PersonalDetails/DOBDay"),
@@ -138,13 +148,14 @@ def fill(form_key, dossier):
     di = [i + 1 for i in range(0, len(arr) - 1, 2) if str(arr[i]) == "datasets"][0]
     root = etree.fromstring(bytes(arr[di].read_bytes()))
 
+    # Racine des donnees = premier element sous <xfa:data> (form1, IMM_5645, IMM_5406, ...).
     data_el = [c for c in root.iter() if etree.QName(c).localname == "data"][0]
     data_root = next((c for c in data_el if isinstance(c.tag, str)), None)
     if data_root is None:
         raise ValueError("Paquet de donnees XFA vide pour " + form_key)
 
     def node(path):
-        cur = data_root
+        cur = data_root  # la racine est deja le premier segment du chemin
         for name in path.split("/")[1:]:
             nxt = None
             for c in cur:
