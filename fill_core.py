@@ -10,7 +10,7 @@ Trois formulaires ne passent pas par cette methode :
   - IMM 5669  : aucun paquet datasets dans le XFA -> non gere
   - IMM 5690  : liste de controle (cases a cocher seulement), rien a preremplir
 """
-import os, io
+import os, io, re
 TPL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 # Chaque map : cle_dossier -> chemin XFA (depuis la racine des donnees).
@@ -125,6 +125,57 @@ FORMS = {
     },
 }
 
+# Historique scolaire / professionnel (1 ligne d'etudes + 3 lignes d'emploi,
+# limite reelle des formulaires IRCC). Sous-cles d'une entree :
+#   etudes  : ecole, domaine, ville, pays, province, du (AAAA-MM), au (AAAA-MM)
+#   emplois : poste, employeur, ville, pays, province, du (AAAA-MM), au (AAAA-MM)
+def _occ_1294(i):
+    b = "form1/Page3/Occupation/OccupationRow%d" % i
+    return {"poste": b + "/Occupation/Occupation", "employeur": b + "/Employer",
+            "ville": b + "/CityTown/CityTown", "pays": b + "/Pays/Pays", "province": b + "/ProvState",
+            "du_year": b + "/FromYear", "du_month": b + "/FromMonth",
+            "au_year": b + "/ToYear", "au_month": b + "/ToMonth"}
+
+_EDU_1294 = {
+    "ecole": "form1/Page3/Education/Edu_Row1/School",
+    "domaine": "form1/Page3/Education/Edu_Row1/FieldOfStudy",
+    "ville": "form1/Page3/Education/Edu_Row1/CityTown",
+    "pays": "form1/Page3/Education/Edu_Row1/Pays/Pays",
+    "province": "form1/Page3/Education/Edu_Row1/ProvState",
+    "du_year": "form1/Page3/Education/Edu_Row1/FromYear",
+    "du_month": "form1/Page3/Education/Edu_Row1/FromMonth",
+    "au_year": "form1/Page3/Education/Edu_Row1/ToYear",
+    "au_month": "form1/Page3/Education/Edu_Row1/ToMonth",
+}
+
+def _emp_5709(i):
+    b = "form1/Page3/Employment/EmpRec%d" % i
+    return {"poste": b + "/Line1/Occupation", "employeur": b + "/Line1/Employer",
+            "du_year": b + "/Line1/From/YYYY", "du_month": b + "/Line1/From/MM",
+            "ville": b + "/Line2/City", "pays": b + "/Line2/Country", "province": b + "/Line2/ProvState",
+            "au_year": b + "/Line2/To/YYYY", "au_month": b + "/Line2/To/MM"}
+
+_EDU_5709 = {
+    "ecole": "form1/Page3/Education/EduLine1/School",
+    "domaine": "form1/Page3/Education/EduLine1/FieldOfStudy",
+    "du_year": "form1/Page3/Education/EduLine1/From/YYYY",
+    "du_month": "form1/Page3/Education/EduLine1/From/MM",
+    "ville": "form1/Page3/Education/EduLine2/City",
+    "pays": "form1/Page3/Education/EduLine2/Country",
+    "province": "form1/Page3/Education/EduLine2/Prov",
+    "au_year": "form1/Page3/Education/EduLine2/To/YYYY",
+    "au_month": "form1/Page3/Education/EduLine2/To/MM",
+}
+
+HISTORIQUE = {
+    "IMM 1294": {"education": _EDU_1294, "employment": [_occ_1294(1), _occ_1294(2), _occ_1294(3)]},
+    "IMM 5257": {"education": _EDU_1294, "employment": [_occ_1294(1), _occ_1294(2), _occ_1294(3)]},
+    "IMM 5709": {"education": _EDU_5709, "employment": [
+        _emp_5709(1), _emp_5709(2),
+        {"poste": "form1/Page4/EmpRec3/Line1/Occupation", "employeur": "form1/Page4/EmpRec3/Line1/Employer"},
+    ]},
+}
+
 # Formulaires connus mais non preremplissables par injection datasets.
 NON_GERES = {
     "IMM 0008": "Le paquet de donnees XFA est vide (structure non definie). A remplir directement dans Adobe.",
@@ -201,6 +252,38 @@ def fill(form_key, dossier):
         n = node(path)
         if n is not None:
             n.text = str(val); remplis.append(path.split("/")[-1])
+
+    # Historique scolaire et professionnel (1 etude + jusqu'a 3 emplois).
+    hist = HISTORIQUE.get(form_key)
+    if hist:
+        def _split_ym(v):
+            v = (str(v) if v is not None else "").strip()
+            if not v:
+                return ("", "")
+            parts = re.split(r"[-/]", v)
+            if len(parts) >= 2:
+                return (parts[0].strip(), parts[1].strip().zfill(2))
+            return (v, "")
+
+        def _fill_entry(src, mp):
+            dy, dm = _split_ym(src.get("du"))
+            ay, am = _split_ym(src.get("au"))
+            derived = {"du_year": dy, "du_month": dm, "au_year": ay, "au_month": am}
+            for sk, path in mp.items():
+                val = derived[sk] if sk in derived else src.get(sk)
+                if val is None or str(val).strip() == "":
+                    continue
+                n = node(path)
+                if n is not None:
+                    n.text = str(val); remplis.append(path.split("/")[-1])
+
+        etudes = dossier.get("etudes") or []
+        if etudes and hist.get("education"):
+            _fill_entry(etudes[0], hist["education"])
+        emplois = dossier.get("emplois") or []
+        emp_maps = hist.get("employment") or []
+        for i, emp in enumerate(emplois[:len(emp_maps)]):
+            _fill_entry(emp, emp_maps[i])
 
     arr[di].write(etree.tostring(root, encoding="UTF-8"))
     buf = io.BytesIO(); pdf.save(buf)
