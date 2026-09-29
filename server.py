@@ -16,6 +16,23 @@ class H(BaseHTTPRequestHandler):
                 return self._s(401, {"ok": False, "error": "token invalide"})
             n = int(self.headers.get("Content-Length") or 0)
             data = json.loads(self.rfile.read(n) or b"{}")
+            # Mode multi-formulaires : remplit toute la liste et renvoie un ZIP unique.
+            forms = data.get("formulaires")
+            if isinstance(forms, list) and forms:
+                import io, zipfile
+                dossier = data.get("dossier") or {}
+                did = str(data.get("dossier_id") or "dossier")
+                buf = io.BytesIO(); infos = []
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for f in forms:
+                        fk = core.resolve_form(f)
+                        if not fk:
+                            infos.append({"formulaire": f, "ok": False, "error": "non gere"}); continue
+                        pdf, remplis, fn = core.fill(fk, dossier)
+                        z.writestr(fn, pdf)
+                        infos.append({"formulaire": fk, "filename": fn, "champs_remplis": len(remplis)})
+                return self._s(200, {"ok": True, "filename": "Dossier_%s.zip" % did,
+                                     "formulaires": infos, "zip_base64": base64.b64encode(buf.getvalue()).decode()})
             fk = core.resolve_form(data.get("formulaire"))
             if not fk: return self._s(400, {"ok": False, "error": "formulaire non gere", "disponibles": list(core.FORMS.keys())})
             pdf, remplis, fn = core.fill(fk, data.get("dossier") or {})
