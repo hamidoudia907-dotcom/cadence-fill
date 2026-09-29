@@ -101,6 +101,61 @@ FORMS = {
                      "form1/Page1/PersonalDetails/q3-4-5/dob/DOBDay"),
         },
     },
+    "IMM 1295": {  # Demande de permis de travail (hors Canada)
+        "template": "imm1295e.pdf", "filename": "IMM1295_prerempli.pdf",
+        "map": {
+            "nom": "form1/Page1/PersonalDetails/Name/FamilyName",
+            "prenom": "form1/Page1/PersonalDetails/Name/GivenName",
+            "sexe": "form1/Page1/PersonalDetails/Sex/Sex",
+            "lieu_naissance": "form1/Page1/PersonalDetails/PlaceBirthCity",
+            "pays_naissance": "form1/Page1/PersonalDetails/PlaceBirthCountry",
+            "pays_citoyennete": "form1/Page1/PersonalDetails/Citizenship/Citizenship",
+            "pays_residence": "form1/Page1/PersonalDetails/CurrentCOR/Row2/Country",
+            "courriel": "form1/Page3/FaxEmail/Email",
+            "adresse_rue": "form1/Page2/ContactInformation/contact/AddressRow1/Streetname/Streetname",
+            "adresse_ville": "form1/Page2/ContactInformation/contact/AddressRow2/CityTow/CityTown",
+            "adresse_province": "form1/Page2/ContactInformation/contact/AddressRow2/ProvinceState/ProvinceState",
+            "adresse_code_postal": "form1/Page2/ContactInformation/contact/AddressRow2/PostalCode/PostalCode",
+            "etat_matrimonial": "form1/Page1/MaritalStatus/SectionA/MaritalStatus",
+            "telephone": "form1/Page2/ContactInformation/contact/PhoneNumbers/Phone/IntlNumber/IntlNumber",
+            "meme_adresse": "form1/Page2/ContactInformation/contact/SameAsMailingIndicator",
+            "passeport_numero": "form1/Page2/MaritalStatus/SectionA/Passport/PassportNum/PassportNum",
+            "passeport_pays": "form1/Page2/MaritalStatus/SectionA/Passport/CountryofIssue/CountryofIssue",
+            "passeport_emission": "form1/Page2/MaritalStatus/SectionA/Passport/IssueDate/IssueDate",
+            "passeport_expiration": "form1/Page2/MaritalStatus/SectionA/Passport/ExpiryDate",
+            "_dob": ("form1/Page1/PersonalDetails/DOBYear",
+                     "form1/Page1/PersonalDetails/DOBMonth",
+                     "form1/Page1/PersonalDetails/DOBDay"),
+        },
+    },
+    "IMM 5710": {  # Prolongation/modification permis de travail (au Canada)
+        "template": "imm5710e.pdf", "filename": "IMM5710_prerempli.pdf",
+        "map": {
+            "nom": "form1/Page1/PersonalDetails/Name/FamilyName",
+            "prenom": "form1/Page1/PersonalDetails/Name/GivenName",
+            "sexe": "form1/Page1/PersonalDetails/q3-4-5/sex/Sex",
+            "lieu_naissance": "form1/Page1/PersonalDetails/q3-4-5/pob/PlaceBirthCity",
+            "pays_naissance": "form1/Page1/PersonalDetails/q3-4-5/pob/PlaceBirthCountry",
+            "pays_citoyennete": "form1/Page1/PersonalDetails/Citizenship/Citizenship",
+            "pays_residence": "form1/Page1/PersonalDetails/CurrentCOR/CurrentCOR/Row2/Country",
+            "courriel": "form1/Page2/ContactInformation/q5-6/Email/Email",
+            "adresse_rue": "form1/Page2/ContactInformation/Mailing/AddrLine1/Streetname",
+            "adresse_ville": "form1/Page2/ContactInformation/Mailing/AddrLine2/City",
+            "adresse_pays": "form1/Page2/ContactInformation/Mailing/AddrLine2/Country",
+            "adresse_province": "form1/Page2/ContactInformation/Mailing/AddrLine2/Prov",
+            "adresse_code_postal": "form1/Page2/ContactInformation/Mailing/AddrLine2/PostalCode",
+            "etat_matrimonial": "form1/Page1/MaritalStatus/Current/MaritalStatus",
+            "telephone": "form1/Page2/ContactInformation/q3-4/Phone/IntlNumber/IntlNumber",
+            "meme_adresse": "form1/Page2/ContactInformation/Resi/SameAsAddr/SameAsMailingInd",
+            "passeport_numero": "form1/Page2/Passport/PassportNum",
+            "passeport_pays": "form1/Page2/Passport/CountryofIssue",
+            "passeport_emission": "form1/Page2/Passport/IssueDate",
+            "passeport_expiration": "form1/Page2/Passport/ExpiryDate",
+            "_dob": ("form1/Page1/PersonalDetails/q3-4-5/dob/DOBYear",
+                     "form1/Page1/PersonalDetails/q3-4-5/dob/DOBMonth",
+                     "form1/Page1/PersonalDetails/q3-4-5/dob/DOBDay"),
+        },
+    },
     "IMM 5645": {  # Renseignements sur la famille (date de naissance = champ unique)
         "template": "imm5645f.pdf", "filename": "IMM5645_prerempli.pdf",
         "map": {
@@ -167,12 +222,55 @@ _EDU_5709 = {
     "au_month": "form1/Page3/Education/EduLine2/To/MM",
 }
 
+def _occ_1295(i):
+    b = "form1/Page3/PageWrapper/Occupation/OccupationRow%d" % i
+    return {"poste": b + "/Occupation/Occupation", "employeur": b + "/Employer",
+            "ville": b + "/CityTown/CityTown", "pays": b + "/Country/Country", "province": b + "/ProvState",
+            "du_year": b + "/FromYear", "du_month": b + "/FromMonth",
+            "au_year": b + "/ToYear", "au_month": b + "/ToMonth"}
+
+_EDU_1295 = {
+    "ecole": "form1/Page3/PageWrapper/Education/Edu_Row1/School",
+    "domaine": "form1/Page3/PageWrapper/Education/Edu_Row1/FieldOfStudy",
+    "ville": "form1/Page3/PageWrapper/Education/Edu_Row1/CityTown",
+    "pays": "form1/Page3/PageWrapper/Education/Edu_Row1/Country/Country",
+    "province": "form1/Page3/PageWrapper/Education/Edu_Row1/ProvState",
+    "du_year": "form1/Page3/PageWrapper/Education/Edu_Row1/FromYear",
+    "du_month": "form1/Page3/PageWrapper/Education/Edu_Row1/FromMonth",
+    "au_year": "form1/Page3/PageWrapper/Education/Edu_Row1/ToYear",
+    "au_month": "form1/Page3/PageWrapper/Education/Edu_Row1/ToMonth",
+}
+
+def _emp_5710(base):
+    return {"poste": base + "/Line1/Occupation", "employeur": base + "/Line1/Employer",
+            "du_year": base + "/Line1/From/YYYY", "du_month": base + "/Line1/From/MM",
+            "ville": base + "/Line2/City", "pays": base + "/Line2/Country", "province": base + "/Line2/ProvState",
+            "au_year": base + "/Line2/To/YYYY", "au_month": base + "/Line2/To/MM"}
+
+_EDU_5710 = {
+    "ecole": "form1/Page3/Education/EduLine1/School",
+    "domaine": "form1/Page3/Education/EduLine1/FieldOfStudy",
+    "du_year": "form1/Page3/Education/EduLine1/From/YYYY",
+    "du_month": "form1/Page3/Education/EduLine1/From/MM",
+    "ville": "form1/Page3/Education/EduLine2/City",
+    "pays": "form1/Page3/Education/EduLine2/Country",
+    "province": "form1/Page3/Education/EduLine2/Prov",
+    "au_year": "form1/Page3/Education/EduLine2/To/YYYY",
+    "au_month": "form1/Page3/Education/EduLine2/To/MM",
+}
+
 HISTORIQUE = {
     "IMM 1294": {"education": _EDU_1294, "employment": [_occ_1294(1), _occ_1294(2), _occ_1294(3)]},
     "IMM 5257": {"education": _EDU_1294, "employment": [_occ_1294(1), _occ_1294(2), _occ_1294(3)]},
     "IMM 5709": {"education": _EDU_5709, "employment": [
         _emp_5709(1), _emp_5709(2),
         {"poste": "form1/Page4/EmpRec3/Line1/Occupation", "employeur": "form1/Page4/EmpRec3/Line1/Employer"},
+    ]},
+    "IMM 1295": {"education": _EDU_1295, "employment": [_occ_1295(1), _occ_1295(2), _occ_1295(3)]},
+    "IMM 5710": {"education": _EDU_5710, "employment": [
+        _emp_5710("form1/Page3/Employment/EmpRec1"),
+        _emp_5710("form1/Page4/EmpRec2"),
+        _emp_5710("form1/Page4/EmpRec3"),
     ]},
 }
 
@@ -200,6 +298,14 @@ def resolve_form(name):
         if k.lower() in low or low in k.lower(): return k
     return ALIASES.get(low)
 
+# Gabarits non inclus dans le depot : telecharges depuis la source officielle
+# (IRCC) au premier usage puis mis en cache. Le serveur d'execution doit avoir
+# acces a canada.ca.
+TEMPLATE_URLS = {
+    "imm1295e.pdf": "https://www.canada.ca/content/dam/ircc/documents/pdf/english/kits/forms/imm1295/01-09-2023/imm1295e.pdf",
+    "imm5710e.pdf": "https://www.canada.ca/content/dam/ircc/documents/pdf/english/kits/forms/imm5710/01-09-2023/imm5710e.pdf",
+}
+
 def _find_template(cfg):
     import glob
     stem = os.path.splitext(cfg["template"])[0].rstrip("f")
@@ -208,6 +314,18 @@ def _find_template(cfg):
         if os.path.exists(exact): return exact
         cands = sorted(glob.glob(os.path.join(dd, "*" + stem + "*.pdf")))
         if cands: return cands[0]
+    url = TEMPLATE_URLS.get(cfg["template"])
+    if url:
+        cache = os.path.join("/tmp", cfg["template"])
+        if os.path.exists(cache) and os.path.getsize(cache) > 10000:
+            return cache
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            data = r.read()
+        with open(cache, "wb") as fh:
+            fh.write(data)
+        return cache
     raise FileNotFoundError("Gabarit introuvable: " + cfg["template"])
 
 def fill(form_key, dossier):
