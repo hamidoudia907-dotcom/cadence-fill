@@ -5,10 +5,12 @@ On injecte les valeurs dans le paquet 'datasets' du XFA. Le code-barres 2D
 n'est PAS regenere ici : l'avocat ouvre le PDF prerempli dans Adobe Reader,
 verifie, clique Valider (le code-barres se met a jour) puis signe.
 
-Trois formulaires ne passent pas par cette methode :
-  - IMM 0008  : paquet datasets vide (dataGroup), la structure n'existe pas -> non gere
-  - IMM 5669  : aucun paquet datasets dans le XFA -> non gere
+Cas particuliers :
+  - IMM 0008  : paquet datasets vide -> la structure de donnees est creee a partir du gabarit
+  - IMM 5669  : aucun paquet datasets -> un paquet est ajoute au XFA
   - IMM 5690  : liste de controle (cases a cocher seulement), rien a preremplir
+Les listes deroulantes (pays, sexe, etat matrimonial...) recoivent le code IRCC
+(attribut 'lic') correspondant au libelle fourni, quand il est trouve.
 """
 import os, io, re
 TPL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
@@ -178,6 +180,40 @@ FORMS = {
             "courriel": "IMM_5406/page1/SectionA/SectionAinfo/Applicant/PaddedEntry/PersonalData/Row/Email",
         },
     },
+    "IMM 0008": {  # Formulaire de demande generique pour le Canada (RP, asile)
+        "template": "imm0008e.pdf", "filename": "IMM0008_prerempli.pdf",
+        "map": {
+            "nom": "form1/Page1/PersonalDetails/q1/FamilyName",
+            "prenom": "form1/Page1/PersonalDetails/q1/GivenName",
+            "sexe": "form1/Page1/PersonalDetails/q3-4-5-6/Sex/Sex",
+            "lieu_naissance": "form1/Page1/PersonalDetails/q7-8/PlaceBirthCity",
+            "pays_naissance": "form1/Page1/PersonalDetails/q7-8/PlaceBirthCountry",
+            "pays_citoyennete": "form1/Page1/PersonalDetails/q9/Citizenship1",
+            "etat_matrimonial": "form1/Page1/PersonalDetails/q14/MaritalStatus/MaritalStatus",
+            "adresse_rue": "form1/Page1/contactInformation/q1/AddressRow1/Streetname/Streetname",
+            "adresse_ville": "form1/Page1/contactInformation/q1/AddressRow2/CityTown/CityTown",
+            "adresse_pays": "form1/Page1/contactInformation/q1/AddressRow2/Country/Country",
+            "adresse_province": "form1/Page1/contactInformation/q1/AddressRow2/ProvinceState/ProvinceState",
+            "adresse_code_postal": "form1/Page1/contactInformation/q1/AddressRow2/PostalCode/PostalCode",
+            "telephone": "form1/Page1/contactInformation/q3-4/Phone/IntlNumber/IntlNumber",
+            "courriel": "form1/Page1/contactInformation/q5-6/Email",
+            "passeport_numero": "form1/Page1/passport/Passport/PassportNum/PassportNum",
+            "passeport_pays": "form1/Page1/passport/Passport/CountryofIssue/CountryofIssue",
+            "passeport_emission": "form1/Page1/passport/Passport/IssueDate/IssueDate",
+            "passeport_expiration": "form1/Page1/passport/Passport/ExpiryDate",
+            "_dob": ("form1/Page1/PersonalDetails/q7-8/DOB/DOBYYYY",
+                     "form1/Page1/PersonalDetails/q7-8/DOB/DOBMM",
+                     "form1/Page1/PersonalDetails/q7-8/DOB/DOBDD"),
+        },
+    },
+    "IMM 5669": {  # Annexe A - Antecedents / Declaration (pas de paquet datasets : il est cree)
+        "template": "imm5669f.pdf", "filename": "IMM5669_prerempli.pdf",
+        "map": {
+            "nom": "IMM_5669/page1/familyName",
+            "prenom": "IMM_5669/page1/givenName",
+            "date_naissance": "IMM_5669/page1/birthDate3",
+        },
+    },
 }
 
 # Historique scolaire / professionnel (1 ligne d'etudes + 3 lignes d'emploi,
@@ -276,8 +312,6 @@ HISTORIQUE = {
 
 # Formulaires connus mais non preremplissables par injection datasets.
 NON_GERES = {
-    "IMM 0008": "Le paquet de donnees XFA est vide (structure non definie). A remplir directement dans Adobe.",
-    "IMM 5669": "Aucun paquet de donnees XFA (antecedents/declaration). A remplir directement dans Adobe.",
     "IMM 5690": "Liste de controle a cocher : rien a preremplir.",
 }
 
@@ -288,6 +322,8 @@ ALIASES = {
     "imm5709": "IMM 5709", "imm 5709": "IMM 5709", "prolongation etudes": "IMM 5709",
     "imm5645": "IMM 5645", "imm 5645": "IMM 5645", "renseignements famille": "IMM 5645",
     "imm5406": "IMM 5406", "imm 5406": "IMM 5406",
+    "imm0008": "IMM 0008", "imm 0008": "IMM 0008",
+    "imm5669": "IMM 5669", "imm 5669": "IMM 5669", "annexe a": "IMM 5669",
 }
 
 def resolve_form(name):
@@ -330,6 +366,71 @@ def _find_template(cfg):
         return cache
     raise FileNotFoundError("Gabarit introuvable: " + cfg["template"])
 
+XFA_DATA_NS = "http://www.xfa.org/schema/xfa-data/1.0/"
+
+def _norm(v):
+    import unicodedata
+    v = unicodedata.normalize("NFD", str(v or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", " ", v).strip()
+
+def _template_fields(tpl_root):
+    """Chemin de donnees (liaison normale) -> element <field> du gabarit."""
+    from lxml import etree
+    ln = lambda e: etree.QName(e).localname if isinstance(e.tag, str) else None
+    out = {}
+    def bind_none(e):
+        return any(ln(c) == "bind" and c.get("match") == "none" for c in e)
+    def walk(e, path):
+        for c in e:
+            t = ln(c)
+            if t in ("subform", "subformSet", "area"):
+                name = c.get("name")
+                walk(c, path + [name] if (name and not bind_none(c)) else path)
+            elif t in ("field", "exclGroup"):
+                name = c.get("name")
+                if name and not bind_none(c):
+                    out.setdefault("/".join(path + [name]), c)
+    top = next(c for c in tpl_root if ln(c) == "subform")
+    walk(top, [top.get("name")])
+    return out
+
+def _lov_code(field_el, value, lov_root):
+    """Convertit un libelle (ex. 'Senegal', 'M', 'Celibataire') en code de liste IRCC (attribut lic)."""
+    from lxml import etree
+    if field_el is None or lov_root is None: return value
+    bi = next((c for c in field_el if isinstance(c.tag, str) and etree.QName(c).localname == "bindItems"), None)
+    if bi is None or bi.get("valueRef") != "lic": return value
+    m = re.search(r"LOV\.(\w+)\.(\w+)\[\*\]", bi.get("ref") or "")
+    if not m: return value
+    lst = next((e for e in lov_root.iter() if isinstance(e.tag, str) and etree.QName(e).localname == m.group(1)), None)
+    if lst is None: return value
+    items = [(e.get("lic") or "", e.text or "") for e in lst if isinstance(e.tag, str) and e.get("lic")]
+    v = _norm(value)
+    if not v: return value
+    # Libelles francais -> anglais (gabarits en anglais)
+    FR_EN = {"celibataire": "single", "marie": "married", "mariee": "married", "marie e": "married",
+             "conjoint e de fait": "common law", "conjoint de fait": "common law", "conjointe de fait": "common law",
+             "divorce": "divorced", "divorcee": "divorced", "divorce e": "divorced",
+             "separe": "separated", "separee": "separated", "separe e": "separated",
+             "veuf": "widowed", "veuve": "widowed", "veuf veuve": "widowed"}
+    cands = [v] + ([FR_EN[v]] if v in FR_EN else [])
+    for lic, lab in items:
+        if _norm(lab) in cands: return lic
+    for lic, lab in items:
+        if lic.lower() == str(value).strip().lower(): return lic
+    for lic, lab in items:
+        if _norm(lab) == v: return lic
+    for lic, lab in items:  # ex. 'M' -> 'M Male'
+        toks = _norm(lab).split()
+        if toks and (toks[0] == v or v in toks[1:2]): return lic
+    for lic, lab in items:
+        if _norm(lab).startswith(v + " ") or v.startswith(_norm(lab) + " "): return lic
+    first = v.split()[0]
+    if len(first) >= 4:  # ex. 'Veuf/Veuve' -> 'Veuf(ve)'
+        for lic, lab in items:
+            if _norm(lab).split()[:1] == [first]: return lic
+    return value
+
 def fill(form_key, dossier):
     import pikepdf
     from lxml import etree
@@ -337,14 +438,31 @@ def fill(form_key, dossier):
     tpl = _find_template(cfg)
     pdf = pikepdf.open(tpl)
     arr = list(pdf.Root.AcroForm.XFA)
-    di = [i + 1 for i in range(0, len(arr) - 1, 2) if str(arr[i]) == "datasets"][0]
-    root = etree.fromstring(bytes(arr[di].read_bytes()))
+    names = [str(arr[i]) for i in range(0, len(arr) - 1, 2)]
+    tpl_i = names.index("template") * 2 + 1
+    tpl_root = etree.fromstring(bytes(arr[tpl_i].read_bytes()))
+    top_name = next(c for c in tpl_root if isinstance(c.tag, str) and etree.QName(c).localname == "subform").get("name")
 
-    # Racine des donnees = premier element sous <xfa:data> (form1, IMM_5645, IMM_5406, ...).
-    data_el = [c for c in root.iter() if etree.QName(c).localname == "data"][0]
+    if "datasets" in names:
+        di = names.index("datasets") * 2 + 1
+        root = etree.fromstring(bytes(arr[di].read_bytes()))
+    else:
+        # Aucun paquet de donnees (ex. IMM 5669) : on en cree un.
+        root = etree.fromstring(('<xfa:datasets xmlns:xfa="%s"><xfa:data/></xfa:datasets>' % XFA_DATA_NS).encode())
+        new_stream = pikepdf.Stream(pdf, b"")
+        pos = tpl_i + 1
+        arr = arr[:pos] + [pikepdf.String("datasets"), new_stream] + arr[pos:]
+        pdf.Root.AcroForm.XFA = pikepdf.Array(arr)
+        arr = list(pdf.Root.AcroForm.XFA)
+        di = pos + 1
+
+    data_el = [c for c in root.iter() if isinstance(c.tag, str) and etree.QName(c).localname == "data"][0]
     data_root = next((c for c in data_el if isinstance(c.tag, str)), None)
     if data_root is None:
-        raise ValueError("Paquet de donnees XFA vide pour " + form_key)
+        # Paquet de donnees vide (ex. IMM 0008) : on cree la racine du formulaire.
+        data_root = etree.SubElement(data_el, top_name)
+    lov_root = next((c for c in root if isinstance(c.tag, str) and etree.QName(c).localname == "LOVFile"), None)
+    tfields = _template_fields(tpl_root)
 
     def node(path):
         cur = data_root  # la racine est deja le premier segment du chemin
@@ -353,49 +471,44 @@ def fill(form_key, dossier):
             for c in cur:
                 if isinstance(c.tag, str) and etree.QName(c).localname == name:
                     nxt = c; break
-            if nxt is None: return None
+            if nxt is None:
+                nxt = etree.SubElement(cur, name)  # cree la structure manquante
             cur = nxt
         return cur
 
     remplis = []
+    def put(path, val):
+        if val is None or str(val).strip() == "": return
+        val = _lov_code(tfields.get(path), str(val).strip(), lov_root)
+        n = node(path)
+        n.text = str(val); remplis.append(path.split("/")[-1])
+
     for key, path in cfg["map"].items():
         if key == "_dob":
             dob = (dossier.get("date_naissance") or "").split("-")
             if len(dob) == 3:
-                for p, v in zip(path, dob):
-                    n = node(p)
-                    if n is not None:
-                        n.text = v; remplis.append(p.split("/")[-1])
+                for p, v in zip(path, dob): put(p, v)
             continue
-        val = dossier.get(key)
-        if val is None or str(val).strip() == "": continue
-        n = node(path)
-        if n is not None:
-            n.text = str(val); remplis.append(path.split("/")[-1])
+        put(path, dossier.get(key))
+
+    def _split_ym(v):
+        v = (str(v) if v is not None else "").strip()
+        if not v:
+            return ("", "")
+        parts = re.split(r"[-/]", v)
+        if len(parts) >= 2:
+            return (parts[0].strip(), parts[1].strip().zfill(2))
+        return (v, "")
 
     # Historique scolaire et professionnel (1 etude + jusqu'a 3 emplois).
     hist = HISTORIQUE.get(form_key)
     if hist:
-        def _split_ym(v):
-            v = (str(v) if v is not None else "").strip()
-            if not v:
-                return ("", "")
-            parts = re.split(r"[-/]", v)
-            if len(parts) >= 2:
-                return (parts[0].strip(), parts[1].strip().zfill(2))
-            return (v, "")
-
         def _fill_entry(src, mp):
             dy, dm = _split_ym(src.get("du"))
             ay, am = _split_ym(src.get("au"))
             derived = {"du_year": dy, "du_month": dm, "au_year": ay, "au_month": am}
             for sk, path in mp.items():
-                val = derived[sk] if sk in derived else src.get(sk)
-                if val is None or str(val).strip() == "":
-                    continue
-                n = node(path)
-                if n is not None:
-                    n.text = str(val); remplis.append(path.split("/")[-1])
+                put(path, derived[sk] if sk in derived else src.get(sk))
 
         etudes = dossier.get("etudes") or []
         if etudes and hist.get("education"):
@@ -404,6 +517,26 @@ def fill(form_key, dossier):
         emp_maps = hist.get("employment") or []
         for i, emp in enumerate(emplois[:len(emp_maps)]):
             _fill_entry(emp, emp_maps[i])
+
+    # IMM 5669 : tableaux Etudes, Antecedents personnels et Adresses (AAAA-MM).
+    if form_key == "IMM 5669":
+        def ym(v):
+            y, m = _split_ym(v)
+            return (y + "-" + m) if (y and m) else y
+        def lieu(e):
+            return ", ".join(x for x in (e.get("ville"), e.get("pays")) if x)
+        for i, e in enumerate((dossier.get("etudes") or [])[:5], 1):
+            b = "IMM_5669/page2/educationTable/Row%d/" % i
+            put(b + "fromDate", ym(e.get("du"))); put(b + "toDate", ym(e.get("au")))
+            put(b + "Cell3", e.get("ecole")); put(b + "Cell4", lieu(e)); put(b + "Cell6", e.get("domaine"))
+        for i, e in enumerate((dossier.get("emplois") or [])[:5], 1):
+            b = "IMM_5669/page2/personalHistoryTable/Row%d/" % i
+            put(b + "fromDate", ym(e.get("du"))); put(b + "toDate", ym(e.get("au")))
+            put(b + "Cell3", e.get("poste")); put(b + "Cell4", lieu(e)); put(b + "Cell6", e.get("employeur"))
+        b = "IMM_5669/page3/addressTable/Row1/"
+        put(b + "Cell3", dossier.get("adresse_rue")); put(b + "Cell4", dossier.get("adresse_ville"))
+        put(b + "Cell5", dossier.get("adresse_province")); put(b + "Cell6", dossier.get("adresse_code_postal"))
+        put(b + "Cell7", dossier.get("adresse_pays") or dossier.get("pays_residence"))
 
     arr[di].write(etree.tostring(root, encoding="UTF-8"))
     buf = io.BytesIO(); pdf.save(buf)
