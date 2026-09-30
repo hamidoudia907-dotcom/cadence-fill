@@ -28,9 +28,14 @@ class H(BaseHTTPRequestHandler):
                         fk = core.resolve_form(f)
                         if not fk:
                             infos.append({"formulaire": f, "ok": False, "error": "non gere"}); continue
-                        pdf, remplis, fn = core.fill(fk, dossier)
+                        try:
+                            pdf, remplis, fn = core.fill(fk, dossier)
+                        except Exception as fe:
+                            infos.append({"formulaire": fk, "ok": False, "error": str(fe)}); continue
                         z.writestr(fn, pdf)
-                        infos.append({"formulaire": fk, "filename": fn, "champs_remplis": len(remplis)})
+                        infos.append({"formulaire": fk, "ok": True, "filename": fn, "champs_remplis": len(remplis)})
+                if not any(i.get("ok") for i in infos):
+                    return self._s(422, {"ok": False, "error": "aucun formulaire rempli", "formulaires": infos})
                 return self._s(200, {"ok": True, "filename": "Dossier_%s.zip" % did,
                                      "formulaires": infos, "zip_base64": base64.b64encode(buf.getvalue()).decode()})
             fk = core.resolve_form(data.get("formulaire"))

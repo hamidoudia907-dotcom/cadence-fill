@@ -292,10 +292,12 @@ ALIASES = {
 
 def resolve_form(name):
     n = (name or "").strip()
+    if not n: return None  # avant : une valeur vide renvoyait IMM 1294 par defaut
     if n in FORMS: return n
     low = n.lower()
+    compact = low.replace(" ", "")
     for k in FORMS:
-        if k.lower() in low or low in k.lower(): return k
+        if k.lower() in low or k.lower().replace(" ", "") == compact: return k
     return ALIASES.get(low)
 
 # Gabarits non inclus dans le depot : telecharges depuis la source officielle
@@ -321,7 +323,7 @@ def _find_template(cfg):
             return cache
         import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=90) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             data = r.read()
         with open(cache, "wb") as fh:
             fh.write(data)
