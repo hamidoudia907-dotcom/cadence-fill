@@ -216,6 +216,75 @@ FORMS = {
     },
 }
 
+# Champs complementaires (statut de residence, deja marie, langues, destination, etudes, financement).
+# Valeurs attendues dans le dossier :
+#   statut_residence      code IRCC (ex. '01' = citoyen)
+#   deja_marie            'N' ou 'Y'
+#   langue_communication  'French' | 'English' | 'Both'
+#   langue_correspondance '02' (francais) | '01' (anglais)   [IMM 0008]
+#   langue_entrevue       '002' (francais) | '001' (anglais) [IMM 0008]
+#   province_destination  abreviation (QC, ON, ...) ; ville_destination
+#   etablissement, dli, frais_payes_par ('Myself'|'Parents'|'Other'), garant, fonds
+_SA = "form1/Page2/MaritalStatus/SectionA"
+EXTRA = {
+    "IMM 1294": {
+        "statut_residence": "form1/Page1/PersonalDetails/CurrentCOR/Row2/Status",
+        "deja_marie": _SA + "/PrevMarriedIndicator",
+        "langue_communication": _SA + "/Languages/languages/ableToCommunicate/ableToCommunicate",
+        "etablissement": "form1/Page3/DetailsOfStudy/PurposeRow1/schoolName/SchoolName",
+        "province_destination": "form1/Page3/DetailsOfStudy/PurposeRow1/ProvinceState/Prov",
+        "ville_destination": "form1/Page3/DetailsOfStudy/PurposeRow1/CityTown/CityTown",
+        "dli": "form1/Page3/DetailsOfStudy/PurposeRow1/DLI",
+        "frais_payes_par": "form1/Page3/Contacts_Row1/expensesPaid/expensesPaidBy",
+        "garant": "form1/Page3/Contacts_Row1/expensesPaid/Other",
+        "fonds": "form1/Page3/Contacts_Row1/expensesPaid/Funds/Funds",
+    },
+    "IMM 5257": {
+        "statut_residence": "form1/Page1/PersonalDetails/CurrentCOR/Row2/Status",
+        "deja_marie": _SA + "/PrevMarriedIndicator",
+        "langue_communication": _SA + "/Languages/languages/ableToCommunicate/ableToCommunicate",
+        "fonds": "form1/Page3/DetailsOfVisit/PurposeRow1/Funds/Funds",
+    },
+    "IMM 5709": {
+        "statut_residence": "form1/Page1/PersonalDetails/CurrentCOR/CurrentCOR/Row2/Status",
+        "deja_marie": "form1/Page2/MaritalStatus/PrevMarriage/PrevMarriedIndicator",
+        "langue_communication": "form1/Page2/Languages/communicateLang",
+        "etablissement": "form1/Page3/DetailsOfStudy/SchoolDetails/SchoolName",
+        "province_destination": "form1/Page3/DetailsOfStudy/SchoolDetails/Prov",
+        "ville_destination": "form1/Page3/DetailsOfStudy/SchoolDetails/CityTown",
+        "dli": "form1/Page3/DetailsOfStudy/SchoolDetails/DLI",
+        "frais_payes_par": "form1/Page3/DetailsOfStudy/SchoolDetails/Funds/ExpPaidBy",
+        "garant": "form1/Page3/DetailsOfStudy/SchoolDetails/Funds/Other",
+        "fonds": "form1/Page3/DetailsOfStudy/SchoolDetails/Funds/FundsAvail",
+    },
+    "IMM 1295": {
+        "statut_residence": "form1/Page1/PersonalDetails/CurrentCOR/Row2/Status",
+        "deja_marie": _SA + "/PrevMarriedIndicator",
+        "langue_communication": _SA + "/Languages/languages/ableToCommunicate/ableToCommunicate",
+        "adresse_pays": "form1/Page2/ContactInformation/contact/AddressRow2/Country/Country",
+        "province_destination": "form1/Page3/IntendedLocationInCanada/intendedLocation/ProvinceState/ProvinceState",
+        "ville_destination": "form1/Page3/IntendedLocationInCanada/intendedLocation/CityTown/CityTown",
+    },
+    "IMM 5710": {
+        "statut_residence": "form1/Page1/PersonalDetails/CurrentCOR/CurrentCOR/Row2/Status",
+        "deja_marie": "form1/Page2/MaritalStatus/PrevMarriage/PrevMarriedIndicator",
+        "langue_communication": "form1/Page2/Languages/communicateLang",
+        "province_destination": "form1/Page3/DetailsOfWork/Location/Prov",
+        "ville_destination": "form1/Page3/DetailsOfWork/Location/City",
+    },
+    "IMM 0008": {
+        "pays_residence": "form1/Page1/PersonalDetails/q10/CurrentCOR/Row2/Country",
+        "statut_residence": "form1/Page1/PersonalDetails/q10/CurrentCOR/Row2/Status",
+        "deja_marie": "form1/Page1/PersonalDetails/q15/PrevMarriedIndicator",
+        "langue_communication": "form1/Page1/languageDetails/Languages/languages/communicateLang/communicateLang",
+        "langue_correspondance": ["form1/Page1/genDetails/q5/CorrespondenceLang",
+                                  "form1/Page1/languageDetails/Languages/languages/freqLang"],
+        "langue_entrevue": "form1/Page1/genDetails/q5/InterviewLang",
+        "province_destination": "form1/Page1/genDetails/q6/Prov",
+        "ville_destination": "form1/Page1/genDetails/q6/CityTown",
+    },
+}
+
 # Historique scolaire / professionnel (1 ligne d'etudes + 3 lignes d'emploi,
 # limite reelle des formulaires IRCC). Sous-cles d'une entree :
 #   etudes  : ecole, domaine, ville, pays, province, du (AAAA-MM), au (AAAA-MM)
@@ -399,7 +468,14 @@ def _lov_code(field_el, value, lov_root):
     from lxml import etree
     if field_el is None or lov_root is None: return value
     bi = next((c for c in field_el if isinstance(c.tag, str) and etree.QName(c).localname == "bindItems"), None)
-    if bi is None or bi.get("valueRef") != "lic": return value
+    if bi is None:
+        its = [c for c in field_el if isinstance(c.tag, str) and etree.QName(c).localname == "items"]
+        if len(its) == 2:
+            disp = [x.text or "" for x in its[0]]; save = [x.text or "" for x in its[1]]
+            for d_, s_ in zip(disp, save):
+                if _norm(d_) == _norm(value) or s_ == str(value).strip(): return s_
+        return value
+    if bi.get("valueRef") != "lic": return value
     m = re.search(r"LOV\.(\w+)\.(\w+)\[\*\]", bi.get("ref") or "")
     if not m: return value
     lst = next((e for e in lov_root.iter() if isinstance(e.tag, str) and etree.QName(e).localname == m.group(1)), None)
@@ -490,6 +566,10 @@ def fill(form_key, dossier):
                 for p, v in zip(path, dob): put(p, v)
             continue
         put(path, dossier.get(key))
+
+    for key, paths in EXTRA.get(form_key, {}).items():
+        for path in (paths if isinstance(paths, list) else [paths]):
+            put(path, dossier.get(key))
 
     def _split_ym(v):
         v = (str(v) if v is not None else "").strip()
